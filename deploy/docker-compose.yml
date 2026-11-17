@@ -1,0 +1,33 @@
+# Constella Dev Platform — local environment.
+# M0: infrastructure only. Services are added milestone by milestone.
+#
+#   docker compose -f deploy/docker-compose.yml up -d
+#
+# RabbitMQ UI:  http://localhost:15672  (guest / guest)
+# Jaeger UI:    http://localhost:16686
+
+name: constella-platform
+
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+  jaeger:
+    image: jaegertracing/jaeger:${JAEGER_VERSION:-2.12.0}
+    ports:
+      - "16686:16686"   # web UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+
+volumes:
+  rabbitmq-data:
