@@ -24,6 +24,15 @@ const ERRORS = {
   WRITE_FAILED: "Не вдалося записати файл.",
   INTERRUPTED: "Збірку перервано перезапуском.",
   CANCELLED: "Збірку скасовано.",
+  CATALOG_UNAVAILABLE: "catalog недоступний.",
+  AUDIT_UNAVAILABLE: "telemetry недоступний (аудит обов'язковий).",
+  SWITCH_FAILED: "Не вдалося перемкнути version.json.",
+  BUILD_NOT_VALIDATED: "Збірку не перевірено.",
+  BUILD_RESERVED: "Збірку вже зарезервовано іншим релізом.",
+  BUILD_RELEASED: "Збірку вже опубліковано.",
+  BUILD_NOT_RESERVED: "Резерв не належить цьому релізу.",
+  RELEASE_FAILED: "Реліз не вдався.",
+  MODE_NOT_IMPLEMENTED: "Цей режим ще не реалізовано.",
 };
 
 // Each check: a title and a function that renders its parameters.
@@ -90,3 +99,9 @@ export function checkDetail(c) {
   const spec = CHECKS[c.code];
   return spec?.detail ? spec.detail(c.params || {}) : "";
 }
+
+const STEPS = {
+  reserve: "резерв у catalog", switch: "перемикання version.json",
+  mark_released: "позначка в catalog", audit: "аудит у telemetry",
+};
+export const stepText = (s) => STEPS[s] || s;

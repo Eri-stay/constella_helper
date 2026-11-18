@@ -14,6 +14,7 @@ import (
 	"constella/internal/platform/events"
 	"constella/internal/platform/inbox"
 	"constella/internal/platform/outbox"
+	"constella/internal/platform/sqlitex"
 	"constella/services/catalog/internal/app"
 )
 
@@ -25,6 +26,16 @@ var Schema = []string{
 		checked_at TEXT NOT NULL,
 		artifact   TEXT NOT NULL,
 		checks     TEXT NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS artifacts (
+		build_id   TEXT PRIMARY KEY,
+		sha256     TEXT    NOT NULL,
+		size_bytes INTEGER NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS reservations (
+		build_id   TEXT PRIMARY KEY,
+		release_id TEXT NOT NULL,
+		state      TEXT NOT NULL
 	)`,
 	inbox.Schema,
 	outbox.Schema,
@@ -50,8 +61,76 @@ func (r Repo) SaveReport(ctx context.Context, inEventID string, rec app.Record, 
 			rec.BuildID, rec.Verdict, rec.CheckedAt.Format(time.RFC3339Nano), rec.Artifact, string(checks)); err != nil {
 			return fmt.Errorf("upsert report %s: %w", rec.BuildID, err)
 		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO artifacts (build_id, sha256, size_bytes) VALUES (?, ?, ?)
+			ON CONFLICT(build_id) DO UPDATE SET sha256 = excluded.sha256, size_bytes = excluded.size_bytes`,
+			rec.BuildID, rec.SHA256, rec.SizeBytes); err != nil {
+			return fmt.Errorf("upsert artifact %s: %w", rec.BuildID, err)
+		}
 		return outbox.Add(ctx, tx, out)
 	})
+}
+
+const (
+	stateReserved = "reserved"
+	stateReleased = "released"
+)
+
+// Reserve implements app.Reservations.
+func (r Repo) Reserve(ctx context.Context, buildID, releaseID string) (app.Reserved, error) {
+	var out app.Reserved
+	err := sqlitex.InTx(ctx, r.DB, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, `SELECT r.build_id, r.artifact, a.sha256, a.size_bytes
+			FROM reports r JOIN artifacts a ON a.build_id = r.build_id
+			WHERE r.build_id = ? AND r.verdict = ?`, buildID, app.VerdictValidated).
+			Scan(&out.BuildID, &out.Artifact, &out.SHA256, &out.SizeBytes)
+		if errors.Is(err, sql.ErrNoRows) {
+			return app.ErrNotValidated
+		}
+		if err != nil {
+			return fmt.Errorf("find validated build %s: %w", buildID, err)
+		}
+		var holder, state string
+		err = tx.QueryRowContext(ctx, `SELECT release_id, state FROM reservations WHERE build_id = ?`, buildID).
+			Scan(&holder, &state)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			if _, err := tx.ExecContext(ctx, `INSERT INTO reservations (build_id, release_id, state) VALUES (?, ?, ?)`,
+				buildID, releaseID, stateReserved); err != nil {
+				return fmt.Errorf("insert reservation %s: %w", buildID, err)
+			}
+			return nil
+		case err != nil:
+			return fmt.Errorf("read reservation %s: %w", buildID, err)
+		case holder != releaseID && state == stateReleased:
+			return app.ErrReleased
+		case holder != releaseID:
+			return app.ErrReserved
+		}
+		return nil // the same release asks again
+	})
+	return out, err
+}
+
+// MarkReleased implements app.Reservations.
+func (r Repo) MarkReleased(ctx context.Context, buildID, releaseID string) error {
+	res, err := r.DB.ExecContext(ctx, `UPDATE reservations SET state = ? WHERE build_id = ? AND release_id = ?`,
+		stateReleased, buildID, releaseID)
+	if err != nil {
+		return fmt.Errorf("mark %s released: %w", buildID, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 { // RowsAffected cannot fail on SQLite
+		return app.ErrNotReserved
+	}
+	return nil
+}
+
+// Cancel implements app.Reservations.
+func (r Repo) Cancel(ctx context.Context, buildID, releaseID string) error {
+	if _, err := r.DB.ExecContext(ctx, `DELETE FROM reservations WHERE build_id = ? AND release_id = ?`,
+		buildID, releaseID); err != nil {
+		return fmt.Errorf("cancel reservation of %s: %w", buildID, err)
+	}
+	return nil
 }
 
 const reportColumns = `build_id, verdict, checked_at, artifact, checks`

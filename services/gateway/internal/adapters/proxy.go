@@ -77,3 +77,22 @@ func (p *Proxy) rewrite(pr *httputil.ProxyRequest) {
 		pr.Out.Header.Set("Authorization", "Bearer "+p.token)
 	}
 }
+
+// NewUpdates serves /updates/* (version.json and data files) from the release
+// service. The path is kept; the internal token is added.
+func NewUpdates(target *url.URL, token string) http.Handler {
+	rp := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.Header.Del("Authorization")
+			if token != "" {
+				pr.Out.Header.Set("Authorization", "Bearer "+token)
+			}
+		},
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+			httpx.WriteError(w, http.StatusBadGateway, httpx.CodeUnavailable, map[string]any{"service": "release"})
+		},
+	}
+	return rp
+}

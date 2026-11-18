@@ -163,10 +163,14 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 - Gateway: токен, маршрути `/api/{service}/…` → `/v1/…`, `/api/overview` (API Composition: сервіс, що впав, показується як `down`), `/api/stream` (SSE), UI вбудований (`web/embed.go`). Circuit breaker стоїть у клієнті overview; проксі має лише timeout.
 - UI, вкладки 1–2: збірки з живим статусом, звіт перевірки, пошук зір (англійською, українською, `HIP 32349`, `Alp CMa`), культури і схема сузір'я в SVG.
 
-### M2. `telemetry` і `release` у режимі A
-- Event-sourced `Release`, атомарний switch `version.json` (temp + rename), роздача артефактів.
-- `/v1/audit`, `/v1/client-log` зі scrubber `C:\Users\<name>\`.
-- UI: вкладки 3 і 5.
+### M2. `telemetry` і `release` у режимі A ✅ (код і тести; наскрізний сценарій у Docker ще не пройдено)
+- `domain/release`: агрегат `Release` (event sourcing у стилі лаб2; `Replay` дає той самий стан, що й живий агрегат). Статуси `requested → reserved → switched → published | failed`.
+- Сага `PublishClassic` у `release`: `catalog.Reserve` → копія артефакту з перевіркою SHA-256 і атомарний switch `version.json` (temp + rename) → `catalog.MarkReleased` → **обов'язковий** `telemetry POST /v1/audit`. Збій кроку відкочує попередні (відновлення попереднього `version.json`, `catalog.Cancel`), реліз зберігається як `failed` із кроком і кодом; HTTP `502 RELEASE_FAILED`. У класичному режимі події брокера не публікуються.
+- `catalog`: протокол резервування (`POST/DELETE /v1/builds/{id}/reserve`, `POST …/release`), ідемпотентний за `release_id`; тепер зберігає SHA-256 і розмір артефакту.
+- `telemetry`: аудит (`POST /v1/audit` з `Idempotency-Key`, плюс консюмер `#` через inbox), `POST /v1/client-log` зі scrubber `C:\Users\<name>\` (`domain/telemetry`), `ErrorSink`: Noop за замовчуванням, Sentry лише за `SENTRY_DSN`.
+- Роздача: `GET /updates/version.json` і `/updates/data/cosmos-<id>.db` через gateway без токена.
+- UI: вкладки «Релізи» (публікація, історія, поточний `version.json`) і «Аудит і логи» (з демо scrubber).
+- Режим `eda` відповідає `501 MODE_NOT_IMPLEMENTED` до M3.
 
 ### M3. Режим B і брокер (Завдання 3)
 - Worker саги, компенсації, outbox → `release.published`, споживачі з inbox, DLQ.

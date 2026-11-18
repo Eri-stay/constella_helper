@@ -18,6 +18,7 @@ type Reports interface {
 	Report(ctx context.Context, buildID string) (app.Record, error)
 	Reports(ctx context.Context, limit int) ([]app.Record, error)
 	Active(ctx context.Context) (app.Record, bool, error)
+	app.Reservations
 }
 
 // Routes registers the catalog REST API on mux.
@@ -33,6 +34,9 @@ func Routes(mux *http.ServeMux, reports Reports, ix *Index) {
 	mux.HandleFunc("GET /v1/reports", h.reportList)
 	mux.HandleFunc("GET /v1/reports/{build}", h.reportOne)
 	mux.HandleFunc("GET /v1/summary", h.summary)
+	mux.HandleFunc("POST /v1/builds/{build}/reserve", h.reserve)
+	mux.HandleFunc("POST /v1/builds/{build}/release", h.markReleased)
+	mux.HandleFunc("DELETE /v1/builds/{build}/reserve", h.cancel)
 	mux.HandleFunc("GET /v1/stars", h.stars)
 	mux.HandleFunc("GET /v1/constellations", h.constellations)
 	mux.HandleFunc("GET /v1/cultures", h.cultures)
@@ -49,6 +53,14 @@ func fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, app.ErrNotFound), errors.Is(err, ErrNotFound):
 		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, nil)
+	case errors.Is(err, app.ErrNotValidated):
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, map[string]any{"reason": "BUILD_NOT_VALIDATED"})
+	case errors.Is(err, app.ErrReserved):
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, map[string]any{"reason": "BUILD_RESERVED"})
+	case errors.Is(err, app.ErrReleased):
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, map[string]any{"reason": "BUILD_RELEASED"})
+	case errors.Is(err, app.ErrNotReserved):
+		httpx.WriteError(w, http.StatusConflict, httpx.CodeConflict, map[string]any{"reason": "BUILD_NOT_RESERVED"})
 	case errors.Is(err, ErrNoActive):
 		httpx.WriteError(w, http.StatusServiceUnavailable, CodeNoCatalog, nil)
 	default:
@@ -162,4 +174,63 @@ func intParam(w http.ResponseWriter, r *http.Request, name string, def, lo, hi i
 		return 0, false
 	}
 	return n, true
+}
+
+type releaseBody struct {
+	ReleaseID string `json:"release_id"`
+}
+
+// releaseID reads the release id: from the query for DELETE, else from the body.
+func releaseID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id := r.URL.Query().Get("release_id")
+	if r.Method != http.MethodDelete {
+		var b releaseBody
+		if err := httpx.DecodeJSON(r, &b); err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, nil)
+			return "", false
+		}
+		id = b.ReleaseID
+	}
+	if id == "" {
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, map[string]any{"field": "release_id"})
+		return "", false
+	}
+	return id, true
+}
+
+func (h handlers) reserve(w http.ResponseWriter, r *http.Request) {
+	id, ok := releaseID(w, r)
+	if !ok {
+		return
+	}
+	res, err := h.reports.Reserve(r.Context(), r.PathValue("build"), id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
+func (h handlers) markReleased(w http.ResponseWriter, r *http.Request) {
+	id, ok := releaseID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.reports.MarkReleased(r.Context(), r.PathValue("build"), id); err != nil {
+		fail(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "released"})
+}
+
+func (h handlers) cancel(w http.ResponseWriter, r *http.Request) {
+	id, ok := releaseID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.reports.Cancel(r.Context(), r.PathValue("build"), id); err != nil {
+		fail(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }

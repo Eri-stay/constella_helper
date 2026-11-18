@@ -5,6 +5,8 @@ import { $, el, badge } from "./dom.js";
 import { errorText } from "./i18n.js";
 import { initBuilds } from "./tab_builds.js";
 import { initVerify } from "./tab_verify.js";
+import { initReleases } from "./tab_releases.js";
+import { initAudit } from "./tab_audit.js";
 
 const banner = $("#banner");
 const tokenInput = $("#token");
@@ -27,6 +29,8 @@ const tabs = [...document.querySelectorAll("#tabs [role=tab]")];
 const panels = new Map(tabs.map((t) => [t.dataset.tab, $("#tab-" + t.dataset.tab)]));
 let verify;
 let builds;
+let releases;
+let audit;
 
 function select(name) {
   for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === name));
@@ -34,6 +38,8 @@ function select(name) {
   try { history.replaceState(null, "", "#" + name); } catch { /* sandboxed frame */ }
   if (name === "builds") builds.refresh();
   if (name === "verify") verify.refresh();
+  if (name === "releases") releases.refresh();
+  if (name === "audit") audit.refresh();
 }
 
 for (const t of tabs) t.addEventListener("click", () => select(t.dataset.tab));
@@ -46,6 +52,8 @@ builds = initBuilds({
   },
 });
 verify = initVerify({ onError });
+releases = initReleases({ onError });
+audit = initAudit({ onError });
 
 // ---- token ----------------------------------------------------------------
 
@@ -84,6 +92,8 @@ function refreshActive() {
   const current = tabs.find((t) => t.getAttribute("aria-selected") === "true")?.dataset.tab;
   if (current === "builds") builds.refresh();
   if (current === "verify") verify.refresh();
+  if (current === "releases") releases.refresh();
+  if (current === "audit") audit.refresh();
 }
 
 const overviewEl = $("#overview");

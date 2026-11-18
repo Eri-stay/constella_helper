@@ -66,6 +66,8 @@ func run(log *slog.Logger) error {
 	api.Handle("GET /api/overview", adapters.Overview{Client: client, Summaries: []adapters.Summary{
 		{Name: "dataprep", URL: targets["dataprep"].String() + "/v1/builds?limit=1"},
 		{Name: "catalog", URL: targets["catalog"].String() + "/v1/summary"},
+		{Name: "release", URL: targets["release"].String() + "/v1/releases?limit=1"},
+		{Name: "telemetry", URL: targets["telemetry"].String() + "/v1/summary"},
 	}})
 	api.Handle("GET /api/stream", hub)
 	apiHandler := httpx.Wrap(api, httpx.ServerOptions{Service: service, Log: log, Token: token})
@@ -77,6 +79,8 @@ func run(log *slog.Logger) error {
 	root := http.NewServeMux()
 	root.Handle("/api/", cors(os.Getenv("CORS_ORIGIN"), apiHandler))
 	root.Handle(httpx.HealthPath, apiHandler)
+	// The update channel is public (clients have no platform token).
+	root.Handle("GET /updates/", adapters.NewUpdates(targets["release"], token))
 	root.Handle("/", noCache(http.FileServerFS(ui))) // the UI is public; every call it makes needs the token
 
 	var wg sync.WaitGroup
@@ -96,8 +100,10 @@ func run(log *slog.Logger) error {
 // serviceURLs reads the base URL of every service the gateway routes to.
 func serviceURLs() (map[string]*url.URL, error) {
 	defaults := map[string]string{
-		"dataprep": "http://localhost:8081",
-		"catalog":  "http://localhost:8082",
+		"dataprep":  "http://localhost:8081",
+		"catalog":   "http://localhost:8082",
+		"release":   "http://localhost:8083",
+		"telemetry": "http://localhost:8084",
 	}
 	out := map[string]*url.URL{}
 	for name, def := range defaults {

@@ -100,13 +100,59 @@
     </section>
 
     <section id="tab-releases" role="tabpanel" hidden>
-      <p class="placeholder">Релізи: публікація <code>version.json</code> двома способами з'являться на етапі M2–M3.</p>
+      <div class="toolbar">
+        <label>Збірка <select id="release-build"></select></label>
+        <button id="publish-classic" class="primary">Опублікувати (класично)</button>
+        <button id="publish-eda" title="Режим подій: етап M3">Опублікувати (події)</button>
+      </div>
+      <p id="release-result" class="muted"></p>
+      <div class="cols">
+        <div>
+          <h2>Історія релізів</h2>
+          <div class="table-wrap">
+            <table id="releases-table">
+              <thead><tr><th>Реліз</th><th>Збірка</th><th>Режим</th><th>Статус</th><th>Початок</th><th class="num">Час</th><th>Версія</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h2>Опублікований version.json</h2>
+          <pre id="manifest" class="code"></pre>
+          <p class="muted small">Клієнти читають його за адресою <code>/updates/version.json</code> (без токена).
+            Класичний режим: відповідь приходить після всіх кроків (резерв, перемикання, позначка, обов'язковий аудит);
+            якщо крок падає, попередні кроки відкочуються.</p>
+        </div>
+      </div>
     </section>
     <section id="tab-research" role="tabpanel" hidden>
       <p class="placeholder">Дослідження сузір'їв: останній етап (M6).</p>
     </section>
     <section id="tab-audit" role="tabpanel" hidden>
-      <p class="placeholder">Аудит подій і логи клієнтів: етап M2.</p>
+      <div class="toolbar">
+        <label>Тип події <input id="audit-type" placeholder="release., catalog., dataprep." size="22"></label>
+        <span id="sink-info" class="muted"></span>
+      </div>
+      <h2>Аудит</h2>
+      <div class="table-wrap">
+        <table id="audit-table">
+          <thead><tr><th>Час</th><th>Джерело</th><th>Подія</th><th>Кореляція</th><th>Шлях</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <h2>Логи клієнтів</h2>
+      <form id="log-form" class="toolbar">
+        <input id="log-msg" size="60" value="Не вдалося відкрити C:\Users\Марія\Documents\Constella\Tests\variant_1.json" aria-label="Тестове повідомлення">
+        <button type="submit">Надіслати тестовий лог</button>
+        <span id="log-result" class="muted small"></span>
+      </form>
+      <div class="table-wrap">
+        <table id="logs-table">
+          <thead><tr><th>Час</th><th>Рівень</th><th>Повідомлення</th><th>Інсталяція</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="muted small">Шляхи очищаються від імені користувача Windows (<code>C:\Users\&lt;user&gt;\</code>) до збереження.</p>
     </section>
     <section id="tab-faults" role="tabpanel" hidden>
       <p class="placeholder">Інжекція збоїв і посилання на Jaeger: етап M3.

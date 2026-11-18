@@ -45,6 +45,8 @@ type Record struct {
 	Verdict   string          `json:"verdict"`
 	CheckedAt time.Time       `json:"checked_at"`
 	Artifact  string          `json:"artifact"`
+	SHA256    string          `json:"-"`
+	SizeBytes int64           `json:"-"`
 	Checks    []catalog.Check `json:"checks"`
 }
 
@@ -62,6 +64,7 @@ type Repository interface {
 	SaveReport(ctx context.Context, inEventID string, r Record, out events.Envelope) (duplicate bool, err error)
 	Report(ctx context.Context, buildID string) (Record, error)
 	Reports(ctx context.Context, limit int) ([]Record, error)
+	Reservations
 	// Active returns the newest validated build, if any.
 	Active(ctx context.Context) (Record, bool, error)
 }
@@ -116,7 +119,8 @@ func (s *Service) HandleBuildCompleted(ctx context.Context, env events.Envelope)
 		report = catalog.Validate(snap)
 	}
 
-	rec := Record{BuildID: data.BuildID, CheckedAt: s.now().UTC(), Artifact: data.Artifact, Checks: report.Checks}
+	rec := Record{BuildID: data.BuildID, CheckedAt: s.now().UTC(), Artifact: data.Artifact,
+		SHA256: data.SHA256, SizeBytes: data.SizeBytes, Checks: report.Checks}
 	var out events.Envelope
 	if report.OK() {
 		rec.Verdict = VerdictValidated
@@ -190,3 +194,49 @@ func (s *Service) Reports(ctx context.Context, limit int) ([]Record, error) {
 
 // Active returns the report of the active build.
 func (s *Service) Active(ctx context.Context) (Record, bool, error) { return s.repo.Active(ctx) }
+
+// Errors of the reservation protocol (the release saga's first step).
+var (
+	// ErrNotValidated: the build has no validated report.
+	ErrNotValidated = errors.New("build is not validated")
+	// ErrReserved: another release holds the build.
+	ErrReserved = errors.New("build is reserved by another release")
+	// ErrReleased: the build was already released.
+	ErrReleased = errors.New("build is already released")
+	// ErrNotReserved: the release holds no reservation on the build.
+	ErrNotReserved = errors.New("build is not reserved by this release")
+)
+
+// Reserved describes a reserved artifact.
+type Reserved struct {
+	BuildID   string `json:"build_id"`
+	Artifact  string `json:"artifact"`
+	SHA256    string `json:"sha256"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+// Reservations is the storage of reservations. All three are idempotent for
+// the same release id, so callers may retry.
+type Reservations interface {
+	// Reserve gives a validated build to a release.
+	Reserve(ctx context.Context, buildID, releaseID string) (Reserved, error)
+	// MarkReleased turns the reservation into a final release.
+	MarkReleased(ctx context.Context, buildID, releaseID string) error
+	// Cancel drops the reservation or the release mark of that release (compensation).
+	Cancel(ctx context.Context, buildID, releaseID string) error
+}
+
+// Reserve reserves a validated build for a release.
+func (s *Service) Reserve(ctx context.Context, buildID, releaseID string) (Reserved, error) {
+	return s.repo.Reserve(ctx, buildID, releaseID)
+}
+
+// MarkReleased marks the build released.
+func (s *Service) MarkReleased(ctx context.Context, buildID, releaseID string) error {
+	return s.repo.MarkReleased(ctx, buildID, releaseID)
+}
+
+// Cancel undoes Reserve or MarkReleased.
+func (s *Service) Cancel(ctx context.Context, buildID, releaseID string) error {
+	return s.repo.Cancel(ctx, buildID, releaseID)
+}
