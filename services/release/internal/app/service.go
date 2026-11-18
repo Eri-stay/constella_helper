@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"constella/internal/domain/release"
@@ -162,6 +163,8 @@ func (s *Service) PublishClassic(ctx context.Context, buildID string) (*release.
 	}
 	ctx, span := tracer.Start(ctx, "release publish", s.attrs(r))
 	defer span.End()
+	first.Traceparent = traceparent(ctx)
+	r.TraceParent = first.Traceparent
 	g := &saga{s: s, r: r, pending: []release.Event{first}}
 	if err := g.run(ctx); err != nil {
 		span.RecordError(err)
@@ -180,6 +183,8 @@ func (s *Service) RequestEDA(ctx context.Context, buildID string) (*release.Rele
 	}
 	ctx, span := tracer.Start(ctx, "release request", s.attrs(r))
 	defer span.End()
+	first.Traceparent = traceparent(ctx)
+	r.TraceParent = first.Traceparent
 	g := &saga{s: s, r: r, pending: []release.Event{first}}
 	if err := g.flush(ctx); err != nil {
 		span.RecordError(err)
@@ -188,6 +193,13 @@ func (s *Service) RequestEDA(ctx context.Context, buildID string) (*release.Rele
 	}
 	s.Wake()
 	return r, nil
+}
+
+// traceparent returns the W3C trace context of ctx ("" when untraced).
+func traceparent(ctx context.Context) string {
+	c := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, c)
+	return c.Get("traceparent")
 }
 
 func (s *Service) attrs(r *release.Release) trace.SpanStartEventOption {
@@ -246,6 +258,11 @@ func (s *Service) Advance(ctx context.Context, id string) error {
 	}
 	if r.Status == release.Published || r.Status == release.Failed {
 		return nil
+	}
+	// The worker runs later and elsewhere, but its spans belong to the trace of
+	// the request that created the release.
+	if r.TraceParent != "" {
+		ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier{"traceparent": r.TraceParent})
 	}
 	ctx, span := tracer.Start(ctx, "release saga", s.attrs(r))
 	defer span.End()
@@ -501,15 +518,21 @@ func (g *saga) fail(ctx context.Context, step string, cause error) error {
 	// The request may be gone (client left or timed out); compensation must still run.
 	ctx = context.WithoutCancel(ctx)
 	compensated := true
+	ctx, span := tracer.Start(ctx, "saga compensate", trace.WithAttributes(attribute.String("failed.step", step)))
+	defer span.End()
 	if g.r.Status == release.Switched {
-		if err := g.s.publisher.Restore(ctx, g.previous); err != nil {
+		if err := g.compensate(ctx, "restore manifest", func(ctx context.Context) error {
+			return g.s.publisher.Restore(ctx, g.previous)
+		}); err != nil {
 			compensated = false
 			g.s.log.ErrorContext(ctx, "compensation failed: restore manifest", "release_id", g.r.ID, "err", err)
 		}
 	}
 	if g.r.Status != release.Requested || step == release.StepReserve {
 		// Cancel is idempotent; it also frees a reservation whose answer was lost.
-		if err := g.s.catalog.Cancel(ctx, g.r.BuildID, g.r.ID); err != nil {
+		if err := g.compensate(ctx, "cancel reservation", func(ctx context.Context) error {
+			return g.s.catalog.Cancel(ctx, g.r.BuildID, g.r.ID)
+		}); err != nil {
 			compensated = false
 			g.s.log.ErrorContext(ctx, "compensation failed: cancel reservation", "release_id", g.r.ID, "err", err)
 		}
@@ -527,6 +550,18 @@ func (g *saga) fail(ctx context.Context, step string, cause error) error {
 	}
 	g.s.log.WarnContext(ctx, "release failed", "release_id", g.r.ID, "step", step, "code", code, "compensated", compensated)
 	return &StepError{Step: step, Code: code, Compensated: compensated, Err: cause}
+}
+
+// compensate runs one undo action in its own span, so a rollback is visible in the trace.
+func (g *saga) compensate(ctx context.Context, name string, run func(context.Context) error) error {
+	ctx, span := tracer.Start(ctx, "compensate "+name)
+	defer span.End()
+	if err := run(ctx); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	return nil
 }
 
 // Get replays one release from its events.

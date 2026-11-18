@@ -10,6 +10,9 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"constella/internal/domain/telemetry"
 	"constella/internal/platform/events"
 )
@@ -97,6 +100,8 @@ func (s *Service) RecordAudit(ctx context.Context, in AuditInput, key string) (i
 
 // HandleEvent audits any broker event (the telemetry queue binds to "#").
 func (s *Service) HandleEvent(ctx context.Context, env events.Envelope) error {
+	// Lets a trace be found by the release or build it belongs to.
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("correlation.id", env.CorrelationID))
 	dup, err := s.store.AddEventAudit(ctx, env.ID, AuditEntry{
 		At: env.OccurredAt, Source: env.Producer, Type: env.Type, CorrelationID: env.CorrelationID,
 		Via: ViaEvent, Data: env.Data,

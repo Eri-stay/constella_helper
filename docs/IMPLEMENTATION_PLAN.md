@@ -180,10 +180,12 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 - `catalog` валідує збірку подією `dataprep.build.completed` (з M1). `release.q` поки нічого не споживає, його підписка на `catalog.build.*` не потрібна, бо реліз ініціює користувач; `research.q` додасться в M6.
 - UI: кнопка «Опублікувати (події)», живий статус релізу, вкладка «Збої» (затримка і частка помилок на сервіс через `/debug/fault`, стан breaker-ів, посилання на Jaeger і RabbitMQ).
 
-### M4. Трасування (Завдання 4)
-- `otelhttp` скрізь, ін'єкція та витяг `traceparent` в AMQP, `traceparent` у рядку outbox (щоб relay продовжив трейс).
-- Атрибути спанів `build.id`, `release.id`, `mode`; помилки позначаються статусом Error.
-- Скріншоти: (1) режим A, (2) режим B, (3) збій: `telemetry` зупинено в режимі A (червоний спан і компенсація) і в режимі B (реліз пройшов, аудит пізніше).
+### M4. Трасування (Завдання 4) ✅
+- `otelhttp` скрізь, `traceparent` в AMQP-заголовках і в рядку outbox (з M0–M3). Нове в M4: `traceparent` запиту зберігається в події `requested`, тому воркер режиму подій продовжує **той самий трейс**, що й `POST` (раніше починав новий).
+- Атрибути спанів: `build.id`, `release.id`, `mode`, `attempt`, `failed.step`, `correlation.id`. Помилки: статус Error на кроці, на `release publish`/`release saga` і на HTTP-спанах. Відкат має власні спани `saga compensate` → `compensate restore manifest`, `compensate cancel reservation`.
+- `GET /api/release/releases` віддає `trace_id`; у UI біля релізу є «↗» на трейс у Jaeger.
+- `tools/tracecheck` друкує дерево останнього трейсу сценарію й перевіряє очікувані спани, сервіси та позначки помилок (`classic`, `eda`, `classic-fail`). Порядок скріншотів і сценарії: `docs/TRACING.md`.
+- Пройдено в Docker: `classic` (gateway → release → catalog → telemetry, 4 сервіси), `eda` (відповідь `202` за 16 мс; запит, воркер, кроки, `release.published` у gateway і telemetry в одному трейсі), `classic-fail` (зупинений `telemetry`: `saga audit` з Error, 502, `saga compensate`). У режимі подій з зупиненим `telemetry` реліз `published`, а після `start telemetry` події `release.requested|published` дочитано в аудит.
 
 ### M5. Експерименти (Завдання 2)
 `tools/bench` робить N=50 публікацій на режим і сценарій та виводить p50, p95 і частку помилок у markdown у `docs/EXPERIMENTS.md`.

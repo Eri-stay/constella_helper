@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"constella/internal/domain/release"
@@ -48,6 +49,7 @@ type View struct {
 	EndedAt    *time.Time      `json:"ended_at,omitempty"`
 	DurationMS int64           `json:"duration_ms,omitempty"`
 	Failure    *Failure        `json:"failure,omitempty"`
+	TraceID    string          `json:"trace_id,omitempty"`
 	Events     []release.Event `json:"events,omitempty"`
 }
 
@@ -61,7 +63,7 @@ type Failure struct {
 
 func view(r *release.Release, evs []release.Event) View {
 	v := View{ID: r.ID, BuildID: r.BuildID, Mode: r.Mode, Status: r.Status, Version: r.Version,
-		StartedAt: r.StartedAt, Events: evs}
+		StartedAt: r.StartedAt, Events: evs, TraceID: traceID(r.TraceParent)}
 	if !r.EndedAt.IsZero() {
 		end := r.EndedAt
 		v.EndedAt = &end
@@ -157,4 +159,13 @@ func (h handlers) version(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(b) // a write error means the client left
 	}
+}
+
+// traceID extracts the trace id from a W3C traceparent (version-traceid-spanid-flags).
+func traceID(tp string) string {
+	parts := strings.Split(tp, "-")
+	if len(parts) != 4 || len(parts[1]) != 32 {
+		return ""
+	}
+	return parts[1]
 }

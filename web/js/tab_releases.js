@@ -75,7 +75,7 @@ export function initReleases({ onError }) {
   }
 
   const row = (r) => withDetail(el("tr", {},
-    el("td", {}, el("code", {}, r.id)),
+    el("td", {}, el("code", {}, r.id), r.trace_id ? [" ", el("a", { href: "http://localhost:16686/trace/" + r.trace_id, target: "_blank", rel: "noopener", title: "Трейс у Jaeger" }, "↗")] : null),
     el("td", {}, el("code", {}, r.build_id)),
     el("td", {}, r.mode === "classic" ? "класичний" : "події"),
     el("td", { "data-sort": r.status }, statusCell(r)),

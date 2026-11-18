@@ -67,6 +67,10 @@ type Event struct {
 	Code        string `json:"code,omitempty"`
 	Compensated bool   `json:"compensated,omitempty"`
 	Detail      string `json:"detail,omitempty"` // technical cause of a failure, for operators
+
+	// Traceparent (requested) is the W3C trace context of the request, so the
+	// worker of an event-mode release continues the same trace.
+	Traceparent string `json:"traceparent,omitempty"`
 }
 
 // ErrTransition is returned for a command that is not allowed in the current status.
@@ -83,6 +87,8 @@ type Release struct {
 	SizeBytes int64
 	Version   string
 	Failure   *Event // the failed event, if any
+	// TraceParent is the trace context the release was requested in.
+	TraceParent string
 	StartedAt time.Time
 	EndedAt   time.Time
 	// Revision is the number of applied events (for optimistic concurrency).
@@ -156,7 +162,7 @@ func (r *Release) Fail(step, code string, compensated bool, at time.Time) (Event
 func (r *Release) Apply(e Event) {
 	switch e.Type {
 	case EvRequested:
-		r.BuildID, r.Mode, r.Status, r.StartedAt = e.BuildID, e.Mode, Requested, e.At
+		r.BuildID, r.Mode, r.Status, r.StartedAt, r.TraceParent = e.BuildID, e.Mode, Requested, e.At, e.Traceparent
 	case EvReserved:
 		r.Artifact, r.SHA256, r.SizeBytes, r.Status = e.Artifact, e.SHA256, e.SizeBytes, Reserved
 	case EvSwitched:
