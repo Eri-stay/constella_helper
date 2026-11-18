@@ -82,14 +82,14 @@ func TestEventStoreOptimisticConcurrency(t *testing.T) {
 
 	at := time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC)
 	r, first, _ := release.Request("r1", "b1", release.ModeClassic, at)
-	if err := st.Append(ctx, "r1", 0, []release.Event{first}); err != nil {
+	if err := st.Append(ctx, "r1", 0, []release.Event{first}, nil); err != nil {
 		t.Fatal(err)
 	}
 	second, _ := r.Reserve("cosmos-b1.db", "h", 1, at)
-	if err := st.Append(ctx, "r1", 0, []release.Event{second}); err != ErrConflict {
+	if err := st.Append(ctx, "r1", 0, []release.Event{second}, nil); err != ErrConflict {
 		t.Errorf("stale revision: err = %v, want ErrConflict", err)
 	}
-	if err := st.Append(ctx, "r1", 1, []release.Event{second}); err != nil {
+	if err := st.Append(ctx, "r1", 1, []release.Event{second}, nil); err != nil {
 		t.Fatal(err)
 	}
 	evs, err := st.Load(ctx, "r1")

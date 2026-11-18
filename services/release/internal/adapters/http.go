@@ -15,6 +15,7 @@ import (
 // Releases is what the handlers need from the use cases.
 type Releases interface {
 	PublishClassic(ctx context.Context, buildID string) (*release.Release, error)
+	RequestEDA(ctx context.Context, buildID string) (*release.Release, error)
 	Get(ctx context.Context, id string) (*release.Release, []release.Event, error)
 	List(ctx context.Context, limit int) ([]*release.Release, error)
 	Manifest(ctx context.Context) ([]byte, error)
@@ -23,6 +24,7 @@ type Releases interface {
 // Routes registers the release REST API on mux.
 //
 //	POST /v1/releases?mode=classic  {build_id}  200 {release} | 502 {code, params: step, ...}
+//	POST /v1/releases?mode=eda      {build_id}  202 {release}; progress via GET and the event stream
 //	GET  /v1/releases, /v1/releases/{id}
 //	GET  /v1/version                the published version.json
 func Routes(mux *http.ServeMux, svc Releases) {
@@ -54,6 +56,7 @@ type Failure struct {
 	Step        string `json:"step"`
 	Code        string `json:"code"`
 	Compensated bool   `json:"compensated"`
+	Detail      string `json:"detail,omitempty"`
 }
 
 func view(r *release.Release, evs []release.Event) View {
@@ -65,7 +68,7 @@ func view(r *release.Release, evs []release.Event) View {
 		v.DurationMS = end.Sub(r.StartedAt).Milliseconds()
 	}
 	if r.Failure != nil {
-		v.Failure = &Failure{Step: r.Failure.Step, Code: r.Failure.Code, Compensated: r.Failure.Compensated}
+		v.Failure = &Failure{Step: r.Failure.Step, Code: r.Failure.Code, Compensated: r.Failure.Compensated, Detail: r.Failure.Detail}
 	}
 	return v
 }
@@ -82,8 +85,19 @@ func (h handlers) publish(w http.ResponseWriter, r *http.Request) {
 	if mode == "" {
 		mode = release.ModeClassic
 	}
-	if mode != release.ModeClassic {
-		httpx.WriteError(w, http.StatusNotImplemented, "MODE_NOT_IMPLEMENTED", map[string]any{"mode": mode})
+	switch mode {
+	case release.ModeEDA:
+		rel, err := h.svc.RequestEDA(r.Context(), in.BuildID)
+		if err != nil {
+			httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal, nil)
+			return
+		}
+		w.Header().Set("Location", "/v1/releases/"+rel.ID)
+		httpx.WriteJSON(w, http.StatusAccepted, view(rel, nil))
+		return
+	case release.ModeClassic:
+	default:
+		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, map[string]any{"field": "mode"})
 		return
 	}
 	rel, err := h.svc.PublishClassic(r.Context(), in.BuildID)

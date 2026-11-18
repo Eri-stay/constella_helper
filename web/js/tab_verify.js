@@ -19,6 +19,9 @@ export function initVerify({ onError }) {
   const svg = $("#figure-svg");
   const caption = $("#figure-caption");
 
+  // Everything below the report belongs to the build chosen in the list.
+  const build = () => (buildSel.value ? "&build=" + encodeURIComponent(buildSel.value) : "");
+
   let reports = [];
   let cultures = [];
 
@@ -53,14 +56,14 @@ export function initVerify({ onError }) {
     )), 3, "");
   }
 
-  buildSel.addEventListener("change", showReport);
+  buildSel.addEventListener("change", () => { showReport(); searchStars(); loadCultures(); });
 
   // ---- star search -----------------------------------------------------
 
   async function searchStars() {
     starMsg.textContent = "";
     try {
-      const { items } = await api("/catalog/stars?limit=25&q=" + encodeURIComponent(starQ.value));
+      const { items } = await api("/catalog/stars?limit=25&q=" + encodeURIComponent(starQ.value) + build());
       fill(starsBody, items.map(starRow), 9, "Нічого не знайдено.");
       starMsg.textContent = items.length ? `Знайдено: ${items.length}` : "";
     } catch (e) {
@@ -87,7 +90,7 @@ export function initVerify({ onError }) {
 
   async function loadCultures() {
     try {
-      cultures = (await api("/catalog/cultures")).items;
+      cultures = (await api("/catalog/cultures?" + build().slice(1))).items;
     } catch (e) {
       cultures = [];
       if (e.code !== "NO_ACTIVE_CATALOG") onError(e);
@@ -109,7 +112,7 @@ export function initVerify({ onError }) {
     }
     cultureInfo.textContent = `${c.region} · ${c.classification} · фігур ${c.constellations}, ребер ${int(c.edges)}`;
     try {
-      const { items } = await api("/catalog/cultures/" + encodeURIComponent(c.id));
+      const { items } = await api("/catalog/cultures/" + encodeURIComponent(c.id) + "?" + build().slice(1));
       fill(figuresBody, items.map((f) => {
         const tr = el("tr", { class: "clickable", tabindex: "0" },
           el("td", {}, el("code", {}, f.id)),
@@ -129,7 +132,7 @@ export function initVerify({ onError }) {
     figuresBody.querySelectorAll("tr.selected").forEach((r) => r.classList.remove("selected"));
     tr.classList.add("selected");
     try {
-      const fig = await api(`/catalog/cultures/${encodeURIComponent(culture)}/figures/${encodeURIComponent(f.id)}`);
+      const fig = await api(`/catalog/cultures/${encodeURIComponent(culture)}/figures/${encodeURIComponent(f.id)}?${build().slice(1)}`);
       const drawn = drawFigure(svg, fig);
       caption.textContent = drawn
         ? `${[fig.name_en, fig.name_native].filter(Boolean).join(" · ") || fig.id}: зір ${fig.stars.length}, ребер ${fig.edges}`
@@ -144,7 +147,8 @@ export function initVerify({ onError }) {
   return {
     /** Loads everything; selectBuild chooses the report to show. */
     async refresh(selectBuild) {
-      await Promise.all([loadReports(selectBuild), searchStars(), loadCultures()]);
+      await loadReports(selectBuild); // first: it decides which build the rest reads
+      await Promise.all([searchStars(), loadCultures()]);
     },
   };
 }

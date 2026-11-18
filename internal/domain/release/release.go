@@ -60,11 +60,13 @@ type Event struct {
 	SHA256    string `json:"sha256,omitempty"`   // reserved
 	SizeBytes int64  `json:"size_bytes,omitempty"`
 
-	Version string `json:"version,omitempty"` // switched
+	Version  string `json:"version,omitempty"`  // switched
+	Previous string `json:"previous,omitempty"` // switched: the manifest that was replaced, for rollback after a restart
 
 	Step        string `json:"step,omitempty"` // failed
 	Code        string `json:"code,omitempty"`
 	Compensated bool   `json:"compensated,omitempty"`
+	Detail      string `json:"detail,omitempty"` // technical cause of a failure, for operators
 }
 
 // ErrTransition is returned for a command that is not allowed in the current status.
@@ -119,11 +121,12 @@ func (r *Release) Reserve(artifact, sha string, size int64, at time.Time) (Event
 }
 
 // Switch records that the published version.json now points at the build.
-func (r *Release) Switch(version string, at time.Time) (Event, error) {
+// previous is the replaced manifest ("" if there was none).
+func (r *Release) Switch(version, previous string, at time.Time) (Event, error) {
 	if err := r.expect(Reserved, "switch"); err != nil {
 		return Event{}, err
 	}
-	ev := Event{Type: EvSwitched, At: at.UTC(), Version: version}
+	ev := Event{Type: EvSwitched, At: at.UTC(), Version: version, Previous: previous}
 	r.Apply(ev)
 	return ev, nil
 }

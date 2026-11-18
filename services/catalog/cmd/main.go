@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -62,8 +63,20 @@ func run(log *slog.Logger) error {
 
 	repo := adapters.Repo{DB: db}
 	index := &adapters.Index{}
+	artifactsDir := envx.String("ARTIFACTS_DIR", "artifacts")
+	index.Resolve = func(ctx context.Context, buildID string) (string, error) {
+		rec, err := repo.Report(ctx, buildID)
+		if err != nil {
+			return "", adapters.ErrNotFound
+		}
+		path := filepath.Join(artifactsDir, filepath.Base(rec.Artifact))
+		if _, err := os.Stat(path); err != nil {
+			return "", adapters.ErrNotFound
+		}
+		return path, nil
+	}
 	defer index.Close() //nolint:errcheck // process is exiting
-	svc := app.New(repo, adapters.Inspector{}, index, relay, envx.String("ARTIFACTS_DIR", "artifacts"), log)
+	svc := app.New(repo, adapters.Inspector{}, index, relay, artifactsDir, log)
 	if err := svc.Restore(ctx); err != nil {
 		return err
 	}

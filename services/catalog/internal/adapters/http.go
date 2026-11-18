@@ -118,7 +118,7 @@ func (h handlers) stars(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := h.ix.SearchStars(r.Context(), r.URL.Query().Get("q"), limit)
+	items, err := h.ix.SearchStars(buildCtx(r), r.URL.Query().Get("q"), limit)
 	if err != nil {
 		fail(w, err)
 		return
@@ -127,7 +127,7 @@ func (h handlers) stars(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) constellations(w http.ResponseWriter, r *http.Request) {
-	items, err := h.ix.Constellations(r.Context())
+	items, err := h.ix.Constellations(buildCtx(r))
 	if err != nil {
 		fail(w, err)
 		return
@@ -136,7 +136,7 @@ func (h handlers) constellations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) cultures(w http.ResponseWriter, r *http.Request) {
-	items, err := h.ix.Cultures(r.Context())
+	items, err := h.ix.Cultures(buildCtx(r))
 	if err != nil {
 		fail(w, err)
 		return
@@ -145,7 +145,7 @@ func (h handlers) cultures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) figures(w http.ResponseWriter, r *http.Request) {
-	items, err := h.ix.CultureFigures(r.Context(), r.PathValue("id"))
+	items, err := h.ix.CultureFigures(buildCtx(r), r.PathValue("id"))
 	if err != nil {
 		fail(w, err)
 		return
@@ -154,7 +154,7 @@ func (h handlers) figures(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) figure(w http.ResponseWriter, r *http.Request) {
-	f, err := h.ix.FigureLines(r.Context(), r.PathValue("id"), r.PathValue("figure"))
+	f, err := h.ix.FigureLines(buildCtx(r), r.PathValue("id"), r.PathValue("figure"))
 	if err != nil {
 		fail(w, err)
 		return
@@ -233,4 +233,9 @@ func (h handlers) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+}
+
+// buildCtx scopes a query to ?build=<id>; without it the active build is read.
+func buildCtx(r *http.Request) context.Context {
+	return WithBuild(r.Context(), r.URL.Query().Get("build"))
 }

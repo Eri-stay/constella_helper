@@ -172,9 +172,13 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 - UI: вкладки «Релізи» (публікація, історія, поточний `version.json`) і «Аудит і логи» (з демо scrubber).
 - Режим `eda` відповідає `501 MODE_NOT_IMPLEMENTED` до M3.
 
-### M3. Режим B і брокер (Завдання 3)
-- Worker саги, компенсації, outbox → `release.published`, споживачі з inbox, DLQ.
-- Подійна валідація в `catalog`, SSE у gateway, вкладка «Збої».
+### M3. Режим B і брокер (Завдання 3) ✅ (код і тести; сценарій у Docker ще не пройдено)
+- `POST /api/release/releases?mode=eda` зберігає `requested` і `release.requested` в outbox, відповідає `202`; працює воркер саги (`RunWorker`, той самий код кроків, що й у класичному режимі).
+- Воркер повторює крок із backoff (6 спроб: 0,5 с, 1 с, 2 с, 4 с, …; вистачає, щоб breaker клієнта відкрився і знову пробував). Відмова `catalog` (4xx) і локальний збій switch не повторюються. Не вдалось → компенсація (відновлення `version.json`, `catalog.Cancel`) і `release.failed`.
+- Стан саги лежить у event store, тому воркер продовжує реліз після перезапуску. Попередній `version.json` зберігається в події `switched`, тож відкат працює і після перезапуску. Зупинка процесу не провалює реліз.
+- Аудит у режимі подій не синхронний: `release.requested|published|failed` через outbox → RabbitMQ → `telemetry.q` (`#`, inbox) і SSE у gateway. Якщо `telemetry` лежить, реліз проходить, а події чекають у черзі.
+- `catalog` валідує збірку подією `dataprep.build.completed` (з M1). `release.q` поки нічого не споживає, його підписка на `catalog.build.*` не потрібна, бо реліз ініціює користувач; `research.q` додасться в M6.
+- UI: кнопка «Опублікувати (події)», живий статус релізу, вкладка «Збої» (затримка і частка помилок на сервіс через `/debug/fault`, стан breaker-ів, посилання на Jaeger і RabbitMQ).
 
 ### M4. Трасування (Завдання 4)
 - `otelhttp` скрізь, ін'єкція та витяг `traceparent` в AMQP, `traceparent` у рядку outbox (щоб relay продовжив трейс).

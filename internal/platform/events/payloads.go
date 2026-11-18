@@ -42,3 +42,16 @@ type BuildRejectedData struct {
 	BuildID      string   `json:"build_id"`
 	FailedChecks []string `json:"failed_checks"`
 }
+
+// ReleaseData is the payload of the release events (requested, published,
+// failed). Fields that do not apply to the event stay empty.
+type ReleaseData struct {
+	ReleaseID   string `json:"release_id"`
+	BuildID     string `json:"build_id"`
+	Mode        string `json:"mode"`
+	Version     string `json:"version,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
+	Step        string `json:"step,omitempty"`
+	Code        string `json:"code,omitempty"`
+	Compensated bool   `json:"compensated,omitempty"`
+}

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"constella/internal/domain/release"
+	"constella/internal/platform/events"
+	"constella/internal/platform/outbox"
 	"constella/internal/platform/sqlitex"
 )
 
@@ -24,6 +26,7 @@ var Schema = []string{
 		data       TEXT    NOT NULL,
 		PRIMARY KEY (release_id, revision)
 	) WITHOUT ROWID`,
+	outbox.Schema,
 }
 
 // ErrConflict is returned when another writer appended to the stream first.
@@ -33,7 +36,7 @@ var ErrConflict = errors.New("release stream changed concurrently")
 type Store struct{ DB *sql.DB }
 
 // Append implements app.Store. The primary key enforces the expected revision.
-func (s Store) Append(ctx context.Context, id string, revision int, evs []release.Event) error {
+func (s Store) Append(ctx context.Context, id string, revision int, evs []release.Event, out []events.Envelope) error {
 	err := sqlitex.InTx(ctx, s.DB, func(tx *sql.Tx) error {
 		for i, e := range evs {
 			data, err := json.Marshal(e)
@@ -46,6 +49,12 @@ func (s Store) Append(ctx context.Context, id string, revision int, evs []releas
 					return ErrConflict
 				}
 				return fmt.Errorf("insert event %s/%d: %w", id, revision+i, err)
+			}
+		}
+		// Integration events join the same transaction: the outbox guarantee.
+		for _, env := range out {
+			if err := outbox.Add(ctx, tx, env); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -84,6 +93,27 @@ func (s Store) Recent(ctx context.Context, limit int) ([]string, error) {
 		`SELECT release_id FROM release_events WHERE revision = 0 ORDER BY release_id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list releases: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck // Err() below reports failures
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan release id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// Open implements app.Store: event-mode streams without a final event.
+func (s Store) Open(ctx context.Context) ([]string, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT release_id FROM release_events e
+		WHERE revision = 0 AND data LIKE '%"mode":"eda"%'
+		AND NOT EXISTS (SELECT 1 FROM release_events f WHERE f.release_id = e.release_id AND f.type IN ('published', 'failed'))
+		ORDER BY release_id`)
+	if err != nil {
+		return nil, fmt.Errorf("list open releases: %w", err)
 	}
 	defer rows.Close() //nolint:errcheck // Err() below reports failures
 	var ids []string

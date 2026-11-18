@@ -27,11 +27,66 @@ func (Inspector) Inspect(ctx context.Context, path, expectedSHA string) (catalog
 	return cosmosdb.Inspect(ctx, path, expectedSHA)
 }
 
-// Index answers read queries from the active cosmos.db. The database handle is
-// swapped atomically when a newer build is validated.
+// Index answers read queries from the active cosmos.db, or from the build
+// named by WithBuild. The active handle is swapped atomically when a newer
+// build is validated; handles of other builds are opened on demand and kept
+// in a small cache.
 type Index struct {
 	mu sync.RWMutex
 	db *sql.DB
+
+	// Resolve maps a build id to its artifact path; ErrNotFound if unknown.
+	Resolve func(ctx context.Context, buildID string) (string, error)
+
+	cacheMu sync.Mutex
+	cache   map[string]*sql.DB
+	order   []string // cache keys, oldest first
+}
+
+type buildKey struct{}
+
+// WithBuild makes queries on ctx read the given build instead of the active one.
+func WithBuild(ctx context.Context, buildID string) context.Context {
+	if buildID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, buildKey{}, buildID)
+}
+
+const maxCached = 4
+
+func (ix *Index) forBuild(ctx context.Context, id string) (*sql.DB, error) {
+	ix.cacheMu.Lock()
+	defer ix.cacheMu.Unlock()
+	if db, ok := ix.cache[id]; ok {
+		return db, nil
+	}
+	if ix.Resolve == nil {
+		return nil, ErrNoActive
+	}
+	path, err := ix.Resolve(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	db, err := cosmosdb.OpenReadOnly(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		return nil, errors.Join(fmt.Errorf("open %s: %w", path, err), db.Close())
+	}
+	if ix.cache == nil {
+		ix.cache = map[string]*sql.DB{}
+	}
+	if len(ix.order) >= maxCached {
+		oldest := ix.order[0]
+		ix.order = ix.order[1:]
+		_ = ix.cache[oldest].Close() // waits for running queries; nothing to report
+		delete(ix.cache, oldest)
+	}
+	ix.cache[id] = db
+	ix.order = append(ix.order, id)
+	return db, nil
 }
 
 // Activate implements app.Index: it opens the file read-only and makes it the
@@ -57,6 +112,12 @@ func (ix *Index) Activate(path string) error {
 
 // Close releases the active file.
 func (ix *Index) Close() error {
+	ix.cacheMu.Lock()
+	for _, db := range ix.cache {
+		_ = db.Close() // read-only handles; nothing to report
+	}
+	ix.cache, ix.order = nil, nil
+	ix.cacheMu.Unlock()
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
 	if ix.db == nil {
@@ -67,7 +128,10 @@ func (ix *Index) Close() error {
 	return err
 }
 
-func (ix *Index) handle() (*sql.DB, error) {
+func (ix *Index) handle(ctx context.Context) (*sql.DB, error) {
+	if id, _ := ctx.Value(buildKey{}).(string); id != "" {
+		return ix.forBuild(ctx, id)
+	}
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	if ix.db == nil {
@@ -86,7 +150,7 @@ type Summary struct {
 
 // Summary returns counts of the active catalog.
 func (ix *Index) Summary(ctx context.Context) (Summary, error) {
-	db, err := ix.handle()
+	db, err := ix.handle(ctx)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -129,7 +193,7 @@ func scanStar(r scanner) (Star, error) {
 // constellation, or Hipparcos number ("32349" or "HIP 32349"), brightest
 // first. An empty query lists the brightest stars.
 func (ix *Index) SearchStars(ctx context.Context, q string, limit int) ([]Star, error) {
-	db, err := ix.handle()
+	db, err := ix.handle(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +246,7 @@ type Constellation struct {
 
 // Constellations lists the IAU constellations.
 func (ix *Index) Constellations(ctx context.Context) ([]Constellation, error) {
-	db, err := ix.handle()
+	db, err := ix.handle(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +284,7 @@ type Culture struct {
 
 // Cultures lists the sky cultures.
 func (ix *Index) Cultures(ctx context.Context) ([]Culture, error) {
-	db, err := ix.handle()
+	db, err := ix.handle(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +320,7 @@ type Figure struct {
 
 // CultureFigures lists the figures of a culture.
 func (ix *Index) CultureFigures(ctx context.Context, culture string) ([]Figure, error) {
-	db, err := ix.handle()
+	db, err := ix.handle(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +365,7 @@ type FigureEdge struct {
 
 // FigureLines returns the stars and segments of one figure.
 func (ix *Index) FigureLines(ctx context.Context, culture, figure string) (FigureLines, error) {
-	db, err := ix.handle()
+	db, err := ix.handle(ctx)
 	if err != nil {
 		return FigureLines{}, err
 	}

@@ -11,20 +11,23 @@ import (
 	"time"
 
 	"constella/internal/domain/release"
+	"constella/internal/platform/events"
 )
 
 type memStore struct {
 	mu      sync.Mutex
 	streams map[string][]release.Event
+	outbox  []events.Envelope
 }
 
-func (m *memStore) Append(_ context.Context, id string, rev int, evs []release.Event) error {
+func (m *memStore) Append(_ context.Context, id string, rev int, evs []release.Event, out []events.Envelope) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.streams[id]) != rev {
 		return errors.New("conflict")
 	}
 	m.streams[id] = append(m.streams[id], evs...)
+	m.outbox = append(m.outbox, out...)
 	return nil
 }
 
@@ -32,6 +35,19 @@ func (m *memStore) Load(_ context.Context, id string) ([]release.Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return append([]release.Event(nil), m.streams[id]...), nil
+}
+
+func (m *memStore) Open(context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var ids []string
+	for id, evs := range m.streams {
+		last := evs[len(evs)-1].Type
+		if evs[0].Mode == release.ModeEDA && last != release.EvPublished && last != release.EvFailed {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
 }
 
 func (m *memStore) Recent(context.Context, int) ([]string, error) {

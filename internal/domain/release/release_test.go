@@ -24,7 +24,7 @@ func TestHappyPathAndReplay(t *testing.T) {
 		events = append(events, e)
 	}
 	step(r.Reserve("cosmos-b1.db", "abc", 42, t0))
-	step(r.Switch("b1", t0))
+	step(r.Switch("b1", "{old}", t0))
 	step(r.Publish(t0.Add(time.Second)))
 
 	if r.Status != Published || r.Version != "b1" || r.Revision != 4 || !r.EndedAt.Equal(t0.Add(time.Second)) {
@@ -53,7 +53,7 @@ func TestFailureReplay(t *testing.T) {
 func TestInvalidTransitions(t *testing.T) {
 	t.Parallel()
 	r, _, _ := Request("r", "b", ModeEDA, t0)
-	if _, err := r.Switch("v", t0); !errors.Is(err, ErrTransition) {
+	if _, err := r.Switch("v", "", t0); !errors.Is(err, ErrTransition) {
 		t.Errorf("switch before reserve: %v", err)
 	}
 	if _, err := r.Publish(t0); !errors.Is(err, ErrTransition) {
