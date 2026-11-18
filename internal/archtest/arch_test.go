@@ -4,7 +4,8 @@
 //	services/* ─► internal/domain/*   (pure: stdlib only + other domain packages)
 //
 // The platform never imports domain or services; domain never imports
-// platform or services; a service never imports another service.
+// platform or services; a service never imports another service. Shared
+// adapters outside both trees (internal/cosmosdb, web) may be used by services.
 package archtest
 
 import (
@@ -73,6 +74,8 @@ func violation(from, imp string) string {
 		return "domain must stay pure (only other domain packages)"
 	case in(from, "internal/platform/") && (in(imp, "internal/domain/") || in(imp, "services/")):
 		return "platform must not depend on domain or services"
+	case in(from, "internal/cosmosdb") && (in(imp, "services/") || in(imp, "internal/platform/")):
+		return "the cosmos.db format may depend on the domain only"
 	case serviceOf(from) != "" && serviceOf(imp) != "" && serviceOf(from) != serviceOf(imp):
 		return "a service must not import another service (talk over HTTP, gRPC or events)"
 	}
@@ -92,6 +95,9 @@ func TestViolationRules(t *testing.T) {
 		{"constella/services/release/internal/app", "constella/internal/domain/release", false},
 		{"constella/services/release/internal/app", "constella/services/release/internal/adapters", false},
 		{"constella/services/release/internal/app", "constella/services/catalog/internal/app", true},
+		{"constella/internal/cosmosdb", "constella/internal/domain/catalog", false},
+		{"constella/internal/cosmosdb", "constella/internal/platform/outbox", true},
+		{"constella/services/catalog/internal/adapters", "constella/internal/cosmosdb", false},
 	}
 	for _, tc := range tests {
 		if got := violation(tc.from, tc.imp) != ""; got != tc.bad {

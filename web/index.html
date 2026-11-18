@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Constella: платформа розробника</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>Constella <span class="muted">платформа розробника</span></h1>
+    <div class="top-right">
+      <span id="stream-state" class="pill off" title="Живий потік подій (SSE)">потік: вимкнено</span>
+      <form id="login" class="inline" autocomplete="off">
+        <input id="token" type="password" placeholder="токен доступу" aria-label="Токен доступу" size="14">
+        <button type="submit">Увійти</button>
+      </form>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="builds" aria-selected="true">1. Збірки</button>
+    <button role="tab" data-tab="verify">2. Перевірка</button>
+    <button role="tab" data-tab="releases">3. Релізи</button>
+    <button role="tab" data-tab="research">4. Дослідження</button>
+    <button role="tab" data-tab="audit">5. Аудит і логи</button>
+    <button role="tab" data-tab="faults">6. Збої</button>
+  </nav>
+
+  <p id="banner" class="banner" hidden></p>
+
+  <main>
+    <section id="tab-builds" role="tabpanel">
+      <div class="toolbar">
+        <button id="start-build" class="primary">Запустити збірку</button>
+        <span id="build-msg" class="muted"></span>
+        <span class="spacer"></span>
+        <span id="overview" class="muted"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="builds-table">
+          <thead><tr>
+            <th>Збірка</th><th>Статус</th><th>Початок</th><th>Тривалість</th>
+            <th class="num">Зорі</th><th class="num">Сузір'я</th><th class="num">Культури</th>
+            <th class="num">Ребра</th><th class="num">Розмір</th><th>SHA-256</th><th>Перевірка</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="muted small">Збірка читає HYG v4.2 і культури Stellarium, пише <code>cosmos-&lt;id&gt;.db</code> і SHA-256.
+        Далі <b>catalog</b> перевіряє файл і публікує вердикт; сторінка оновлюється з потоку подій.</p>
+    </section>
+
+    <section id="tab-verify" role="tabpanel" hidden>
+      <h2>Звіт перевірки</h2>
+      <div class="toolbar">
+        <label>Збірка <select id="report-build"></select></label>
+        <span id="report-verdict"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="report-table">
+          <thead><tr><th>Перевірка</th><th>Результат</th><th>Деталі</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <h2>Пошук зір</h2>
+      <form id="star-form" class="toolbar">
+        <input id="star-q" type="search" placeholder="Сіріус, Sirius, HIP 32349, Alp CMa…" size="34" aria-label="Пошук зір">
+        <button type="submit">Знайти</button>
+        <span id="star-msg" class="muted"></span>
+      </form>
+      <div class="table-wrap">
+        <table id="stars-table">
+          <thead><tr>
+            <th>Назва</th><th>Українською</th><th class="num">HIP</th><th>Байєр</th><th>Сузір'я</th>
+            <th class="num">Блиск, m</th><th class="num">RA, год</th><th class="num">Dec, °</th><th>Спектр</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <h2>Культури і сузір'я</h2>
+      <div class="toolbar">
+        <label>Культура <select id="culture"></select></label>
+        <span id="culture-info" class="muted"></span>
+      </div>
+      <div class="cols">
+        <div class="table-wrap figures">
+          <table id="figures-table">
+            <thead><tr><th>Фігура</th><th>Назва</th><th class="num">Ребра</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <figure class="plot">
+          <svg id="figure-svg" viewBox="0 0 400 300" role="img" aria-label="Схема сузір'я"></svg>
+          <figcaption id="figure-caption" class="muted small">Оберіть фігуру зі списку.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="tab-releases" role="tabpanel" hidden>
+      <p class="placeholder">Релізи: публікація <code>version.json</code> двома способами з'являться на етапі M2–M3.</p>
+    </section>
+    <section id="tab-research" role="tabpanel" hidden>
+      <p class="placeholder">Дослідження сузір'їв: останній етап (M6).</p>
+    </section>
+    <section id="tab-audit" role="tabpanel" hidden>
+      <p class="placeholder">Аудит подій і логи клієнтів: етап M2.</p>
+    </section>
+    <section id="tab-faults" role="tabpanel" hidden>
+      <p class="placeholder">Інжекція збоїв і посилання на Jaeger: етап M3.
+        Ендпоінти <code>/debug/fault</code> у сервісів уже працюють.</p>
+    </section>
+  </main>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

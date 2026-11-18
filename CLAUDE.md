@@ -7,7 +7,7 @@ Microservice developer platform for the Constella thesis project, built as Lab â
 - Main project: `C:\Users\eri\univer\constella\constella` (Godot client + Go server, see its `CLAUDE.md` and `docs/PLAN.md`). The school app stays a modular monolith; microservices exist only here.
 - Lab â„–2 (`C:\Users\eri\univer\7semestr\ap\lab2`) is the source of the RabbitMQ client and the aggregate pattern. **Copy, never edit or move lab2.**
 - Lab manual: `C:\Users\eri\univer\constella\text_info_context\lab3_manual.txt`.
-- HYG data: `C:\Users\eri\univer\constella\data\hyg_v42.csv` (mounted, never committed). Cultures are mocked in `testdata/cultures/`.
+- HYG data: `C:\Users\eri\univer\constella\data\hyg_v42.csv` (mounted, never committed). Cultures are 14 real Stellarium `skycultures/<id>/index.json` files in `testdata/cultures/` (committed verbatim, licences in its README; no CC BY-ND ones). Constellations are the `constellations[].lines` polylines of HIP numbers; the IAU names come from `modern_iau`.
 
 ## Owner decisions
 

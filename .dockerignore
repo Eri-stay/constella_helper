@@ -1,0 +1,7 @@
+.git
+data
+artifacts
+releases
+*.db
+*.exe
+docs

@@ -4,7 +4,19 @@
 
 ## Стан
 
-**M0 (каркас)** готовий: спільні пакети `internal/platform/*`, інфраструктура в Docker Compose. Сервіси з'являться з M1.
+**M0 (каркас)** і **M1** готові.
+
+- M0: спільні пакети `internal/platform/*`, інфраструктура в Docker Compose.
+- M1: сервіси `dataprep` (HYG + 14 культур Stellarium → `cosmos.db`), `catalog` (перевірка збірки, пошук зір і сузір'їв), `gateway` (токен, проксі, `/api/overview`, SSE) і UI з вкладками «Збірки» та «Перевірка».
+- Далі: M2 (`telemetry`, `release` у класичному режимі).
+
+| Сервіс | Порт | Що робить |
+|---|---|---|
+| `gateway` | 8080 | UI, `/api/*`, потік подій |
+| `dataprep` | 8081 | збірка `cosmos-<id>.db` у фоні |
+| `catalog` | 8082 | вердикт перевірки, пошук |
+
+Нові спільні пакети: `internal/domain/catalog` (чисті правила: набір даних, хеш, валідація) і `internal/cosmosdb` (формат файлу `cosmos.db`).
 
 | Пакет | Призначення |
 |---|---|
@@ -18,11 +30,20 @@
 ## Запуск
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d --wait
+docker compose -f deploy/docker-compose.yml up --build -d --wait
 ```
 
+- UI: http://localhost:8080 (токен `dev-token`, змінюється через `PLATFORM_TOKEN`)
 - RabbitMQ: http://localhost:15672 (guest / guest)
 - Jaeger: http://localhost:16686
+
+`dataprep` монтує HYG з `../../data` (тобто `constella/data/hyg_v42.csv`); інший каталог задається змінною `HYG_DIR`. У UI: «Збірки» → «Запустити збірку» → за 3–4 с збірка `готово`, вердикт `перевірено`; вкладка «Перевірка» показує звіт, пошук (`Сіріус`, `HIP 32349`) і схеми сузір'їв.
+
+Тест пайплайна на реальних даних (пропускається, якщо HYG немає; шлях задається `CONSTELLA_HYG`):
+
+```bash
+go test -count=1 -v -run Real ./services/dataprep/internal/adapters/
+```
 
 Перевірка всього ланцюжка (outbox → RabbitMQ → inbox → трейс у Jaeger):
 

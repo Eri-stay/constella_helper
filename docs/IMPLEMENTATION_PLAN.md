@@ -108,8 +108,9 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 ├─ internal/domain/{catalog,release,genconst,compare}   чисті, без I/O
 ├─ internal/platform/{events,mq,outbox,inbox,otelx,logx,httpx,sqlitex,envx,fault}
 ├─ api/ proto/catalog.proto (+ згенерований код у git) · events/*.md · openapi/*.yaml
-├─ web/ (index.html, app.js, style.css; без збірки)
-├─ testdata/cultures/western_mini.fab (mock-культура)
+├─ web/ (index.html, style.css, js/*.js як ES-модулі; без збірки; вбудовується в gateway через go:embed)
+├─ internal/cosmosdb/   формат cosmos.db (схема, запис, інспектор); спільний для dataprep і catalog
+├─ testdata/cultures/*.json (14 культур Stellarium) · testdata/names_uk.csv
 ├─ deploy/docker-compose.yml · services/*/Dockerfile
 ├─ tools/bench/  ·  docs/{IMPLEMENTATION_PLAN,ARCHITECTURE,EXPERIMENTS}.md
 └─ CLAUDE.md
@@ -145,15 +146,22 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 - `platform`: `events`, `mq` (з лаб2), `otelx.Init(service)`, `httpx` (middleware recover/slog/auth/otel; клієнт із timeout, retry і breaker), `sqlitex` (WAL), `outbox`/`inbox`, `fault`.
 - Юніт-тести outbox/inbox.
 
-### M1. `dataprep`, `catalog`, `gateway` і UI (вкладки 1–2)
+### M1. `dataprep`, `catalog`, `gateway` і UI (вкладки 1–2) ✅
 - HYG v4.2 читається з примонтованого `data/` (у git не кладеться).
-- Mock `.fab` (Ori, UMa, Cas, Cyg, Lyr…).
-- Схема `cosmos.db`: stars, constellations(brightest_star_id), cultures, culture_edges, meta(schema_version, content_hash).
-- Валідація:
-  - кількість зір за ярусами (1616 / 5020 / 8835 …);
-  - кожне ребро культури має HIP;
-  - кожне сузір'я має найяскравішу зорю;
-  - SHA-256 збігається.
+- Культури: **14 реальних культур зі Stellarium** (`skycultures/<id>/index.json`, файли без змін у `testdata/cultures/`, ліцензії в `testdata/cultures/README.md`): `modern_iau` (88 сузір'їв, з нього беруться назви IAU), `egyptian`, `maya`, `norse`, `inuit`, `navajo`, `maori`, `sami`, `hawaiian_starlines`, `boorong`, `aztec`, `mongolian`, `tibetan`, `indian`. Формат `.fab` не використовується: сузір'я лежать в `constellations[].lines` як полілінії HIP. Вершина, що не є HIP-зорею (координата, `DSO:M42`), розриває полілінію.
+- Українські назви 50 яскравих зір: `testdata/names_uk.csv` (чернетка; перевірити перед дипломом).
+- Схема `cosmos.db` (пакет `internal/cosmosdb`, спільний для dataprep і catalog): `stars`, `constellations(brightest_star_id)`, `cultures`, `culture_constellations`, `culture_edges`, `meta(schema_version, content_hash, dropped_edges)`. Файл без WAL, один файл; пишеться в `*.tmp` і перейменовується.
+- `content_hash` = SHA-256 канонічного вмісту (`domain/catalog.ContentHasher`), `sha256` у події = хеш байтів файлу. Збірка відтворювана: той самий вхід дає той самий SHA-256 файлу.
+- Валідація (`domain/catalog.Validate`, коди без тексту, переклад у UI):
+  - кількість зір за ярусами (1616 / 5020 / 8835 / 15459 / 41149 / 83124 / 107938, Сонце враховано; збіг точний);
+  - 88 сузір'їв IAU, кожне з найяскравішою зорею з того ж сузір'я;
+  - кожне ребро культури має HIP-зорю в таблиці `stars`;
+  - SHA-256 файлу і хеш вмісту збігаються;
+  - попередження: ребра, відкинуті при збірці (у культурах є HIP, яких немає в HYG: зараз 4).
+- Потік: `POST /api/dataprep/builds` → `202` → події `dataprep.build.started|completed` через outbox → `catalog` (inbox, дедуплікація) → вердикт `catalog.build.validated|rejected` → SSE у gateway. Одна збірка за раз (`409`); збірка, перервана перезапуском, позначається `INTERRUPTED`.
+- Один наскрізний трейс у Jaeger: gateway → dataprep → RabbitMQ → catalog → gateway SSE.
+- Gateway: токен, маршрути `/api/{service}/…` → `/v1/…`, `/api/overview` (API Composition: сервіс, що впав, показується як `down`), `/api/stream` (SSE), UI вбудований (`web/embed.go`). Circuit breaker стоїть у клієнті overview; проксі має лише timeout.
+- UI, вкладки 1–2: збірки з живим статусом, звіт перевірки, пошук зір (англійською, українською, `HIP 32349`, `Alp CMa`), культури і схема сузір'я в SVG.
 
 ### M2. `telemetry` і `release` у режимі A
 - Event-sourced `Release`, атомарний switch `version.json` (temp + rename), роздача артефактів.
@@ -186,7 +194,7 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 ### M6. `research` і gRPC (останній)
 - `catalog.StreamStars`.
 - `genconst`: haversine-кластеризація + Kruskal MST; режим «none», інші режими полярної зорі як заглушки.
-- `compare`: Jaccard за ребрами відносно mock-культури.
+- `compare`: Jaccard за ребрами відносно культури з `cosmos.db` (наприклад `modern_iau`).
 - Перевірка детермінізму: той самий seed двічі дає той самий хеш.
 - Свіп у CSV; mock-зорі, якщо HYG немає.
 - Додатковий трейс у Jaeger з gRPC.
@@ -200,7 +208,7 @@ constella_helper/                 module constella, go 1.26 (вимога OTel 1
 |---|---|
 | ~~Локальний Go замалий для OTel~~ | знято: локально Go 1.27.4 |
 | Немає `protoc` на Windows | `buf generate` у контейнері, згенерований код комітимо |
-| Немає Stellarium `.fab` | mock `western_mini.fab`; реальні культури пізніше в дипломі |
+| Культури Stellarium | ~~mock~~ знято: 14 реальних `index.json` у `testdata/cultures/` (без культур з ліцензією CC BY-ND) |
 | Обсяг (6 сервісів) | `research` останній; без нього всі 5 завдань методички закриті |
 
 ## 9. Перевірка end-to-end
