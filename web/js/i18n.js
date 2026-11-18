@@ -32,6 +32,7 @@ const ERRORS = {
   BUILD_RELEASED: "Збірку вже опубліковано.",
   BUILD_NOT_RESERVED: "Резерв не належить цьому релізу.",
   RELEASE_FAILED: "Реліз не вдався.",
+  CULTURE_NOT_FOUND: "Такої культури немає в каталозі.",
   MODE_NOT_IMPLEMENTED: "Цей режим ще не реалізовано.",
 };
 
@@ -105,3 +106,9 @@ const STEPS = {
   mark_released: "позначка в catalog", audit: "аудит у telemetry",
 };
 export const stepText = (s) => STEPS[s] || s;
+
+const STRATEGIES = {
+  base: "Базовий MST", sectors: "Вертикальні сектори", imperial: "Імперські кільця",
+  star_paths: "Полінезійські шляхи", cycles: "Цикли (Габрієль)",
+};
+export const strategyText = (s) => STRATEGIES[s] || s;

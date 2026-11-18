@@ -69,6 +69,7 @@ services:
     environment:
       <<: *env
       HTTP_ADDR: ":8082"
+      GRPC_ADDR: ":9082"
       DB_PATH: /data/catalog.db
       ARTIFACTS_DIR: /artifacts
     volumes:
@@ -111,6 +112,24 @@ services:
       <<: *health
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8083/healthz"]
 
+  research:
+    <<: *service
+    build: { context: .., dockerfile: services/research/Dockerfile }
+    environment:
+      <<: *env
+      HTTP_ADDR: ":8085"
+      DB_PATH: /data/research.db
+      CATALOG_URL: http://catalog:8082
+      CATALOG_GRPC: catalog:9082
+    volumes:
+      - research-data:/data
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+      catalog: { condition: service_healthy }
+    healthcheck:
+      <<: *health
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8085/healthz"]
+
   gateway:
     <<: *service
     build: { context: .., dockerfile: services/gateway/Dockerfile }
@@ -122,6 +141,7 @@ services:
       UPSTREAM_CATALOG: http://catalog:8082
       UPSTREAM_RELEASE: http://release:8083
       UPSTREAM_TELEMETRY: http://telemetry:8084
+      UPSTREAM_RESEARCH: http://research:8085
     ports:
       - "8080:8080"
     depends_on:
@@ -130,6 +150,7 @@ services:
       catalog: { condition: service_healthy }
       release: { condition: service_healthy }
       telemetry: { condition: service_healthy }
+      research: { condition: service_healthy }
     healthcheck:
       <<: *health
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
@@ -140,5 +161,6 @@ volumes:
   catalog-data:
   telemetry-data:
   release-data:
+  research-data:
   releases:
   artifacts:

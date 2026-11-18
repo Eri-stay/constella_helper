@@ -55,3 +55,20 @@ type ReleaseData struct {
 	Code        string `json:"code,omitempty"`
 	Compensated bool   `json:"compensated,omitempty"`
 }
+
+// ResearchCompletedData is the payload of ResearchRunCompleted (one sweep).
+type ResearchCompletedData struct {
+	SweepID      string  `json:"sweep_id"`
+	BuildID      string  `json:"build_id"`
+	Culture      string  `json:"culture"`
+	Runs         int     `json:"runs"`
+	BestStrategy string  `json:"best_strategy,omitempty"`
+	BestJaccard  float64 `json:"best_jaccard"`
+}
+
+// ResearchFailedData is the payload of ResearchRunFailed.
+type ResearchFailedData struct {
+	SweepID string `json:"sweep_id"`
+	Code    string `json:"code"`
+	Detail  string `json:"detail,omitempty"`
+}

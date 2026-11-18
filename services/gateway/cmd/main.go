@@ -68,6 +68,7 @@ func run(log *slog.Logger) error {
 		{Name: "catalog", URL: targets["catalog"].String() + "/v1/summary"},
 		{Name: "release", URL: targets["release"].String() + "/v1/releases?limit=1"},
 		{Name: "telemetry", URL: targets["telemetry"].String() + "/v1/summary"},
+		{Name: "research", URL: targets["research"].String() + "/v1/sweeps?limit=1"},
 	}})
 	api.Handle("GET /api/stream", hub)
 	apiHandler := httpx.Wrap(api, httpx.ServerOptions{Service: service, Log: log, Token: token})
@@ -104,6 +105,7 @@ func serviceURLs() (map[string]*url.URL, error) {
 		"catalog":   "http://localhost:8082",
 		"release":   "http://localhost:8083",
 		"telemetry": "http://localhost:8084",
+		"research":  "http://localhost:8085",
 	}
 	out := map[string]*url.URL{}
 	for name, def := range defaults {

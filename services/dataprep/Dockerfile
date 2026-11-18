@@ -4,9 +4,12 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
+COPY api ./api
 COPY internal ./internal
 COPY services/dataprep ./services/dataprep
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dataprep ./services/dataprep/cmd
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dataprep ./services/dataprep/cmd
 
 FROM alpine:3.22
 RUN adduser -D -u 10001 app && mkdir -p /data /artifacts && chown app /data /artifacts

@@ -11,6 +11,8 @@ import (
 
 	"constella/internal/cosmosdb"
 	"constella/internal/domain/catalog"
+	"constella/internal/domain/compare"
+	"constella/internal/domain/genconst"
 	"constella/internal/platform/events"
 	"constella/internal/platform/outbox"
 	"constella/internal/platform/sqlitex"
@@ -199,4 +201,59 @@ func TestPipelineOnRealData(t *testing.T) {
 	}
 	t.Logf("stars=%d constellations=%d cultures=%d edges=%d dropped=%d size=%d",
 		len(ds.Stars), len(ds.Constellations), len(ds.Cultures), len(ds.Edges), ds.DroppedEdges, art.SizeBytes)
+}
+
+// TestResearchStrategiesOnRealData runs every generation strategy on the real
+// HYG stars and compares it with the real cultures. It is a sanity check of
+// the research core (not part of the service): the numbers must be sensible,
+// and equal runs must be identical. Skipped without the HYG file.
+func TestResearchStrategiesOnRealData(t *testing.T) {
+	hyg := os.Getenv("CONSTELLA_HYG")
+	if hyg == "" {
+		hyg = filepath.Join("..", "..", "..", "..", "..", "data", "hyg_v42.csv")
+	}
+	if _, err := os.Stat(hyg); err != nil {
+		t.Skipf("HYG data not available: %v", err)
+	}
+	testdata := filepath.Join("..", "..", "..", "..", "testdata")
+	in, err := FileSources{HYGPath: hyg, CulturesDir: filepath.Join(testdata, "cultures")}.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ds := catalog.NewDataset(in.Stars, in.Cultures, nil)
+	var stars []genconst.Star
+	for _, s := range ds.Stars {
+		if s.HIP != 0 {
+			stars = append(stars, genconst.Star{HIP: s.HIP, RA: s.RA * 15, Dec: s.Dec, Mag: s.Mag})
+		}
+	}
+	refs := map[string][]genconst.Edge{}
+	for _, e := range ds.Edges {
+		refs[e.Culture] = append(refs[e.Culture], genconst.Edge{A: e.A, B: e.B})
+	}
+
+	for _, culture := range []string{"modern_iau", "tibetan", "indian"} {
+		best := 0.0
+		for _, strategy := range genconst.Strategies {
+			p := genconst.Params{Strategy: strategy, MagMax: 5, EpsDeg: 10}
+			res, err := genconst.Generate(stars, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := compare.Edges(res.Edges, refs[culture], res.Used)
+			t.Logf("%-10s %-10s stars=%d edges=%4d clusters=%3d ref=%4d J=%.3f P=%.2f R=%.2f",
+				culture, strategy, len(res.Used), len(res.Edges), res.Clusters, m.Reference, m.Jaccard, m.Precision, m.Recall)
+			if len(res.Edges) == 0 || res.Clusters == 0 {
+				t.Errorf("%s/%s produced nothing", culture, strategy)
+			}
+			best = max(best, m.Jaccard)
+			again, _ := genconst.Generate(stars, p)
+			if genconst.Hash(p, again) != genconst.Hash(p, res) {
+				t.Errorf("%s: not deterministic on real data", strategy)
+			}
+		}
+		if culture == "modern_iau" && best < 0.05 {
+			t.Errorf("no strategy comes near the IAU figures: best Jaccard %.3f", best)
+		}
+	}
 }

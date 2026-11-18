@@ -126,7 +126,40 @@
       </div>
     </section>
     <section id="tab-research" role="tabpanel" hidden>
-      <p class="placeholder">Дослідження сузір'їв: останній етап (M6).</p>
+      <form id="sweep-form" class="panel-form">
+        <div class="toolbar">
+          <label>Культура <select id="sweep-culture"></select></label>
+          <label>Блиск до <input id="sweep-mag" type="number" step="0.5" min="1" max="6.5" value="5" size="4"> m</label>
+          <label>Відстань, ° <input id="sweep-eps" value="6, 8, 10, 12" size="14" title="кілька значень через кому"></label>
+          <label>Seed <input id="sweep-seeds" value="42" size="8" title="кілька значень через кому"></label>
+          <label>Джиттер, ° <input id="sweep-jitter" type="number" step="0.1" min="0" max="5" value="0" size="4"></label>
+        </div>
+        <fieldset class="toolbar" id="sweep-strategies"><legend class="muted small">Стратегії</legend></fieldset>
+        <div class="toolbar">
+          <button type="submit" class="primary" id="sweep-run">Запустити свіп</button>
+          <button type="button" id="sweep-verify" title="Той самий seed двічі: хеші мають збігтися">Перевірити детермінізм</button>
+          <button type="button" id="sweep-csv" disabled>CSV</button>
+          <label>Свіпи <select id="sweep-list"></select></label>
+          <span id="sweep-msg" class="muted"></span>
+        </div>
+      </form>
+      <h2>Підсумок за стратегіями</h2>
+      <div class="table-wrap">
+        <table id="sweep-summary">
+          <thead><tr><th>Стратегія</th><th class="num">Запусків</th><th class="num">Jaccard найкращий</th><th class="num">Jaccard середній</th><th>Найкращі параметри</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <h2>Усі запуски</h2>
+      <div class="table-wrap">
+        <table id="sweep-runs">
+          <thead><tr><th>Стратегія</th><th class="num">Відстань, °</th><th class="num">Seed</th><th class="num">Зорі</th><th class="num">Ребра</th>
+            <th class="num">Кластери</th><th>Jaccard</th><th class="num">Точність</th><th class="num">Повнота</th><th>Хеш</th><th class="num">мс</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="muted small">Jaccard це частка спільних ребер у їхньому об'єднанні між згенерованими сузір'ями та обраною культурою (беруться лише ребра культури між зорями, які отримала стратегія).
+        Стратегії: базовий MST, вертикальні сектори з м'якими межами, імперські кільця (двір і стіни навколо полюса), полінезійські зоряні шляхи (анізотропна метрика), цикли (хорди графа Габрієля).</p>
     </section>
     <section id="tab-audit" role="tabpanel" hidden>
       <div class="toolbar">

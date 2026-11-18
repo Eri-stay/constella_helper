@@ -8,6 +8,7 @@ import { initVerify } from "./tab_verify.js";
 import { initReleases } from "./tab_releases.js";
 import { initAudit } from "./tab_audit.js";
 import { initFaults } from "./tab_faults.js";
+import { initResearch } from "./tab_research.js";
 
 document.querySelectorAll("table").forEach(makeSortable);
 
@@ -35,6 +36,7 @@ let builds;
 let releases;
 let audit;
 let faults;
+let research;
 
 function select(name) {
   for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === name));
@@ -45,6 +47,7 @@ function select(name) {
   if (name === "releases") releases.refresh();
   if (name === "audit") audit.refresh();
   if (name === "faults") faults.refresh();
+  if (name === "research") research.refresh();
 }
 
 for (const t of tabs) t.addEventListener("click", () => select(t.dataset.tab));
@@ -60,6 +63,7 @@ verify = initVerify({ onError });
 releases = initReleases({ onError });
 audit = initAudit({ onError });
 faults = initFaults({ onError });
+research = initResearch({ onError });
 
 // ---- token ----------------------------------------------------------------
 
