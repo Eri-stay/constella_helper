@@ -89,8 +89,8 @@ type Release struct {
 	Failure   *Event // the failed event, if any
 	// TraceParent is the trace context the release was requested in.
 	TraceParent string
-	StartedAt time.Time
-	EndedAt   time.Time
+	StartedAt   time.Time
+	EndedAt     time.Time
 	// Revision is the number of applied events (for optimistic concurrency).
 	Revision int
 }

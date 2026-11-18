@@ -113,3 +113,10 @@ tr.detail td { white-space: normal; background: var(--bad-bg); color: var(--text
 
 button.primary.alt { background: var(--run); border-color: var(--run); color: var(--accent-text); }
 a { color: var(--accent); }
+
+.panel-form { margin-bottom: 8px; }
+fieldset.toolbar { border: 1px solid var(--line); border-radius: 3px; padding: 6px 10px; margin: 0 0 10px; }
+fieldset.toolbar label { display: inline-flex; align-items: center; gap: 4px; }
+.bar { display: inline-block; width: 90px; height: 8px; background: var(--line); border-radius: 4px; vertical-align: middle; margin-right: 6px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+tr.best td { background: var(--ok-bg); }

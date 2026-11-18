@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -95,6 +96,19 @@ func run(log *slog.Logger) error {
 	wg.Go(func() {
 		broker.Consume(ctx, mq.Binding{Queue: "catalog.q", Keys: []string{events.BuildCompleted}}, svc.HandleBuildCompleted)
 	})
+	grpcAddr := envx.String("GRPC_ADDR", ":9082")
+	lis, err := net.Listen("tcp", grpcAddr)
+	if err != nil {
+		return fmt.Errorf("listen grpc %s: %w", grpcAddr, err)
+	}
+	grpcSrv := adapters.NewGRPCServer(index, os.Getenv("PLATFORM_TOKEN"))
+	wg.Go(func() {
+		log.Info("grpc listening", "addr", grpcAddr)
+		if err := grpcSrv.Serve(lis); err != nil {
+			log.Error("grpc server stopped", "err", err)
+		}
+	})
+	wg.Go(func() { <-ctx.Done(); grpcSrv.GracefulStop() })
 	serveErr := httpx.Serve(ctx, envx.String("HTTP_ADDR", ":8082"), handler, log)
 
 	stop() // also when Serve failed: background loops must stop before the database closes

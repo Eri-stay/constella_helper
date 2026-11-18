@@ -91,3 +91,27 @@ go run ./tools/bench -loc
 - Бенч зупинився посеред сценарію: запустіть вручну `docker compose -f deploy/docker-compose.yml start telemetry rabbitmq` і скиньте затримки на вкладці «Збої» (кнопка «Скинути»).
 - «the platform did not become healthy»: `docker compose -f deploy/docker-compose.yml up -d --wait`.
 - Docker Desktop віддає `500`: перезапустіть Docker Desktop і повторіть.
+
+## M6. Дослідження (генерація сузір'їв)
+
+1. Підняти стек і мати перевірену збірку (див. «Підготовка»). `catalog` слухає gRPC на `:9082` (лише всередині Docker-мережі), `research` на `:8085` через gateway.
+2. UI → «Дослідження». Оберіть культуру (`modern_iau`), блиск до 5 m, відстані `6, 8, 10, 12`, seed `42`, усі п'ять стратегій → «Запустити свіп». Прогрес `n з N` оновлюється; за кілька секунд з'являються «Підсумок за стратегіями» (найкращий і середній Jaccard) і таблиця всіх запусків (сортування кліком по заголовку).
+3. «Перевірити детермінізм»: той самий seed двічі, бейдж «детерміновано» і два однакові хеші. Увімкніть «Джиттер, °» = 0.5, щоб бачити, що seed справді діє: різні seed дають різні графи, однакові дають однаковий.
+4. «CSV» завантажує таблицю запусків для диплома. Для серії seed (наприклад `1, 2, 3, 4, 5`) при джиттері 0.5 видно розкид метрик.
+5. Трейс: Jaeger → сервіс `research`, операція `research sweep`: дочірні `load stars` (з gRPC-викликом у `catalog`) і `generate <стратегія>`.
+6. Без UI:
+   ```powershell
+   curl.exe -s -X POST -H "Authorization: Bearer dev-token" -d '{\"culture\":\"modern_iau\",\"eps_list\":[6,8,10,12],\"params\":{\"mag_max\":5}}' http://localhost:8080/api/research/sweeps
+   ```
+
+Перевірка стратегій на реальних даних без Docker (потрібен `hyg_v42.csv`):
+
+```powershell
+go test -count=1 -v -run ResearchStrategies ./services/dataprep/internal/adapters/
+```
+
+Перегенерація gRPC-коду після зміни `api/proto/catalog.proto` (потрібен Docker):
+
+```powershell
+docker run --rm -v "${PWD}:/workspace" -w /workspace bufbuild/buf generate
+```
