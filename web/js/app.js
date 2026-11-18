@@ -1,12 +1,14 @@
 // Admin UI shell: tabs, token, live event stream, service overview.
 
 import { api, getToken, setToken, openStream, ApiError } from "./api.js";
-import { $, el, badge } from "./dom.js";
+import { $, el, badge, makeSortable } from "./dom.js";
 import { errorText } from "./i18n.js";
 import { initBuilds } from "./tab_builds.js";
 import { initVerify } from "./tab_verify.js";
 import { initReleases } from "./tab_releases.js";
 import { initAudit } from "./tab_audit.js";
+
+document.querySelectorAll("table").forEach(makeSortable);
 
 const banner = $("#banner");
 const tokenInput = $("#token");

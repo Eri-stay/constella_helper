@@ -35,6 +35,16 @@ export function initBuilds({ onError, openReport }) {
     }
   }
 
+  const open = new Set(); // ids of failed builds whose reason is shown
+
+  function detail(b) {
+    return el("tr", { class: "detail", hidden: !open.has(b.id) },
+      el("td", { colspan: COLUMNS },
+        el("div", { class: "reason" },
+          el("b", {}, errorText(b.error_code)), " ", el("code", {}, b.error_code),
+          b.error_detail ? el("pre", {}, b.error_detail) : null)));
+  }
+
   function row(b, report) {
     const verdict = report
       ? badge(report.verdict, statusText(report.verdict))
@@ -43,12 +53,27 @@ export function initBuilds({ onError, openReport }) {
     const sha = b.sha256
       ? el("code", { title: b.sha256 }, b.sha256.slice(0, 12) + "…")
       : "—";
-    return el("tr", {},
+    let status = badge(b.status, statusText(b.status));
+    let detailRow = null;
+    if (b.error_code) {
+      detailRow = detail(b);
+      status = el("button", {
+        class: "badge s-failed as-button", title: b.error_detail || errorText(b.error_code),
+        "aria-expanded": String(open.has(b.id)),
+        onclick: (e) => {
+          const show = detailRow.hidden;
+          detailRow.hidden = !show;
+          show ? open.add(b.id) : open.delete(b.id);
+          e.currentTarget.setAttribute("aria-expanded", String(show));
+        },
+      }, statusText(b.status) + " ▾");
+    }
+    const tr = el("tr", {},
       el("td", {}, el("code", {}, b.id)),
-      el("td", {}, badge(b.status, statusText(b.status)),
-        b.error_code ? el("span", { class: "muted small", title: b.error_detail }, " " + errorText(b.error_code)) : null),
-      el("td", {}, time(b.started_at)),
-      el("td", {}, b.status === "running" ? "…" : duration(b.started_at, b.finished_at)),
+      el("td", { "data-sort": b.status }, status),
+      el("td", { "data-sort": b.started_at }, time(b.started_at)),
+      el("td", { "data-sort": b.finished_at ? new Date(b.finished_at) - new Date(b.started_at) : "" },
+        b.status === "running" ? "…" : duration(b.started_at, b.finished_at)),
       el("td", { class: "num" }, int(b.stars)),
       el("td", { class: "num" }, int(b.constellations)),
       el("td", { class: "num" }, int(b.cultures)),
@@ -58,6 +83,8 @@ export function initBuilds({ onError, openReport }) {
       el("td", {}, verdict),
       el("td", {}, report ? el("button", { class: "link", onclick: () => openReport(b.id) }, "Звіт") : null),
     );
+    tr.detailRow = detailRow;
+    return tr;
   }
 
   startBtn.addEventListener("click", async () => {

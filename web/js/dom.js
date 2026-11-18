@@ -20,13 +20,71 @@ export function badge(kind, text) {
   return el("span", { class: `badge s-${kind}` }, text);
 }
 
+/**
+ * Fills a table body. A row may carry `row.detailRow`, a full-width row that
+ * follows it (an expandable explanation); sorting moves the two together.
+ */
 export function fill(tbody, rows, columns, emptyText) {
   tbody.replaceChildren();
   if (!rows.length) {
-    tbody.append(el("tr", {}, el("td", { class: "empty", colspan: columns }, emptyText)));
+    tbody.append(el("tr", { class: "empty-row" }, el("td", { class: "empty", colspan: columns }, emptyText)));
     return;
   }
-  tbody.append(...rows);
+  for (const r of rows) {
+    tbody.append(r);
+    if (r.detailRow) tbody.append(r.detailRow);
+  }
+  const table = tbody.closest("table");
+  if (table?._sort) applySort(table);
+}
+
+const collator = new Intl.Collator("uk", { numeric: true, sensitivity: "base" });
+
+function cellValue(row, col) {
+  const cell = row.children[col];
+  if (!cell) return "";
+  return cell.dataset.sort ?? cell.textContent.trim();
+}
+
+const asNumber = (v) => {
+  const n = Number(String(v).replace(/[\s\u00a0]/g, "").replace(",", "."));
+  return v !== "" && v !== "—" && Number.isFinite(n) ? n : NaN;
+};
+
+function applySort(table) {
+  const { col, dir } = table._sort;
+  const tbody = table.tBodies[0];
+  const rows = [...tbody.children].filter((r) => !r.classList.contains("detail") && !r.classList.contains("empty-row"));
+  rows.sort((a, b) => {
+    const x = cellValue(a, col);
+    const y = cellValue(b, col);
+    const nx = asNumber(x);
+    const ny = asNumber(y);
+    const c = Number.isNaN(nx) || Number.isNaN(ny) ? collator.compare(x, y) : nx - ny;
+    return c * dir;
+  });
+  for (const r of rows) {
+    tbody.append(r);
+    if (r.detailRow) tbody.append(r.detailRow);
+  }
+  [...table.tHead.rows[0].cells].forEach((th, i) =>
+    th.setAttribute("aria-sort", i === col ? (dir > 0 ? "ascending" : "descending") : "none"));
+}
+
+/** Makes every non-empty header cell sort its column on click (and Enter). */
+export function makeSortable(table) {
+  [...table.tHead.rows[0].cells].forEach((th, i) => {
+    if (!th.textContent.trim()) return;
+    th.classList.add("sortable");
+    th.tabIndex = 0;
+    const toggle = () => {
+      const same = table._sort?.col === i;
+      table._sort = { col: i, dir: same ? -table._sort.dir : 1 };
+      applySort(table);
+    };
+    th.addEventListener("click", toggle);
+    th.addEventListener("keydown", (e) => { if (e.key === "Enter") toggle(); });
+  });
 }
 
 const fmtTime = new Intl.DateTimeFormat("uk-UA", { dateStyle: "short", timeStyle: "medium" });

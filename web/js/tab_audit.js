@@ -17,7 +17,7 @@ export function initAudit({ onError }) {
     try {
       const { items } = await api("/telemetry/audit?limit=100&type=" + encodeURIComponent(typeInput.value.trim()));
       fill(auditBody, items.map((a) => el("tr", {},
-        el("td", {}, time(a.at)),
+        el("td", { "data-sort": a.at }, time(a.at)),
         el("td", {}, a.source),
         el("td", {}, el("code", {}, a.type)),
         el("td", {}, a.correlation_id ? el("code", {}, a.correlation_id) : "—"),
@@ -33,7 +33,7 @@ export function initAudit({ onError }) {
     try {
       const { items } = await api("/telemetry/client-log?limit=50");
       fill(logsBody, items.map((l) => el("tr", {},
-        el("td", {}, time(l.at)),
+        el("td", { "data-sort": l.at }, time(l.at)),
         el("td", {}, badge(l.level === "info" ? "none" : l.level === "warn" ? "warn" : "fail", l.level)),
         el("td", { class: "wrap" }, l.message),
         el("td", {}, l.installation || "—"),

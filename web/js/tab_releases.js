@@ -41,8 +41,8 @@ export function initReleases({ onError }) {
     el("td", {}, r.mode === "classic" ? "класичний" : "події"),
     el("td", {}, badge(r.status === "published" ? "ok" : r.status === "failed" ? "fail" : "running", releaseStatus(r.status)),
       r.failure ? el("span", { class: "muted small" }, ` ${stepText(r.failure.step)}: ${errorText(r.failure.code)}${r.failure.compensated ? " (відкат виконано)" : ""}`) : null),
-    el("td", {}, time(r.started_at)),
-    el("td", { class: "num" }, r.duration_ms != null ? `${int(r.duration_ms)} мс` : "…"),
+    el("td", { "data-sort": r.started_at }, time(r.started_at)),
+    el("td", { class: "num", "data-sort": r.duration_ms ?? "" }, r.duration_ms != null ? `${int(r.duration_ms)} мс` : "…"),
     el("td", {}, r.version ? el("code", {}, r.version) : "—"),
   );
 

@@ -48,7 +48,7 @@ export function initVerify({ onError }) {
     verdictEl.append(badge(r.verdict, statusText(r.verdict)), " ", el("span", { class: "muted" }, time(r.checked_at)));
     fill(reportBody, r.checks.map((c) => el("tr", {},
       el("td", {}, checkTitle(c)),
-      el("td", {}, badge(c.status, statusText(c.status))),
+      el("td", { "data-sort": c.status }, badge(c.status, statusText(c.status))),
       el("td", { class: "muted" }, checkDetail(c)),
     )), 3, "");
   }
